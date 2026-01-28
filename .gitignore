@@ -1,0 +1,119 @@
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Локальные файлы VS Code
+.vscode-server/
+.vscode-test/
+
+# Компилируемые/сгенерированные файлы (зависит от языка)
+*.o
+*.obj
+*.class
+*.dll
+*.so
+*.dylib
+*.exe
+*.out
+
+# Папки сборки
+bin/
+obj/
+dist/
+build/
+out/
+target/
+
+# Зависимости (примеры для разных экосистем)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json    # если хотите игнорировать lock-файл
+*.tgz               # архивы npm
+
+vendor/             # PHP Composer
+composer.lock       # если хотите игнорировать
+
+.gradle/
+.maven/
+
+# IDE и редакторы (дополнительно)
+*.sublime-workspace
+*.swp
+*.swo
+*.swn
+
+# Лог-файлы
+*.log
+
+# Временные файлы ОС
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Резервные копии
+*~
+*.bak
+*.tmp
+
+# Документация/генерация
+docs/_build/
+*.pdf
+*.docx
+*.xlsx
+
+# Пользовательские настройки (если не нужно версионировать)
+.env
+.env.local
+.env.*.local
+
+# Тесты
+.coverage/
+coverage/
+.nyc_output/
+
+# Другие возможные артефакты
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+
+# Архивы
+*.zip
+*.tar.gz
+*.7z
+*.rar
+
+# Изображения/медиа (если не нужны в репозитории)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.svg
+*.mp3
+*.wav
+*.mp4
+*.avi
+*.mov
