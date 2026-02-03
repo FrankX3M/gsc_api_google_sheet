@@ -26,7 +26,7 @@ const CONFIG = {
     // ],
   },
 
-  // Цвета заголовков для каждого домена (по кругу, если домен больше чем цветов)
+ // Цвета заголовков для каждого домена (по кругу, если домен больше чем цветов)
   DOMAIN_COLORS: [
     { bg: '#4285F4', font: '#FFFFFF' }, // синий
     { bg: '#34A853', font: '#FFFFFF' }, // зелёный
@@ -785,24 +785,35 @@ function getColorForMetric(value, metricType) {
 }
 
 // ═══════════════════════════════════════════════
-// КОЛОНКА ДАТЫ
+// КОЛОНКА ДАТЫ  ←  ИЗМЕНЕНА: новые данные всегда в колонке B
+// ═══════════════════════════════════════════════
+// Логика:
+//   1. Если в колонке B (row 2) уже стоит сегодняшняя дата — просто возвращаем 2.
+//   2. Иначе вставляем новую пустую колонку после A.
+//      Все существующие данные (B, C, D …) автоматически сдвигаются вправо (→ C, D, E …).
+//      Возвращаем 2 (свежая колонка B).
 // ═══════════════════════════════════════════════
 
 function getTodayColumn(sheet) {
-  const today   = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy');
-  const lastCol = sheet.getLastColumn();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy');
 
-  for (let col = 2; col <= lastCol; col++) {
-    const cellValue = sheet.getRange(2, col).getValue();
-    if (cellValue && cellValue.toString() === today) {
-      Logger.log(`Найдена колонка для сегодня: ${col}`);
-      return col;
-    }
+  // Проверяем колонку B (индекс 2) — есть ли уже сегодня?
+  const existingValue = sheet.getRange(2, 2).getValue();
+  if (existingValue && existingValue.toString() === today) {
+    Logger.log('Колонка B уже содержит сегодняшнюю дату — используем её');
+    return 2;
   }
 
-  const newCol = lastCol + 1;
-  Logger.log(`Создается новая колонка для сегодня: ${newCol}`);
-  return newCol;
+  // Если в колонке B есть старые данные (или пуста, но лист не новый) — вставляем колонку
+  // sheet.insertColumnAfter(1) => вставляет новую колонку после столбца A,
+  // сдвигая B→C, C→D и т.д.
+  if (sheet.getLastColumn() >= 2) {
+    sheet.insertColumnAfter(1);
+    Logger.log('Вставлена новая колонка B; старые данные сдвинуты вправо');
+  }
+
+  // Теперь колонка B — свежая и пустая
+  return 2;
 }
 
 // ═══════════════════════════════════════════════
@@ -1147,7 +1158,7 @@ function onOpen() {
 }
 
 // ═══════════════════════════════════════════════
-// WRAPPER-ФУНКЦИИ для меню (поддержка до 10 URL)
+// WRAPPER-ФУНКЦИИ для меню (поддержка до 20 URL)
 // ═══════════════════════════════════════════════
 function collectUrl0() { collectDataForSingleUrl(0); }
 function collectUrl1() { collectDataForSingleUrl(1); }
