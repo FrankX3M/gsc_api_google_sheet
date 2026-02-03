@@ -28,12 +28,12 @@ const CONFIG = {
 
  // Цвета заголовков для каждого домена (по кругу, если домен больше чем цветов)
   DOMAIN_COLORS: [
-    { bg: '#4285F4', font: '#FFFFFF' }, // синий
-    { bg: '#34A853', font: '#FFFFFF' }, // зелёный
-    { bg: '#9C27B0', font: '#FFFFFF' }, // фиолетовый
-    { bg: '#FF9800', font: '#FFFFFF' }, // оранжевый
-    { bg: '#F44336', font: '#FFFFFF' }, // красный
-    { bg: '#00BCD4', font: '#FFFFFF' }, // бирюзовый
+    { bg: '#2979FF', font: '#FFFFFF' }, // яркий синий (Material Design Blue A400)
+    { bg: '#00C853', font: '#FFFFFF' }, // яркий зелёный (Material Design Green A700)
+    { bg: '#D500F9', font: '#FFFFFF' }, // яркий фиолетовый (Material Design Purple A400)
+    { bg: '#FF6D00', font: '#FFFFFF' }, // яркий оранжевый (Material Design Orange A700)
+    { bg: '#FF1744', font: '#FFFFFF' }, // яркий красный (Material Design Red A400)
+    { bg: '#00E5FF', font: '#000000' }, // яркий бирюзовый (Material Design Cyan A400)
   ],
 
   SHEET_NAME: 'PageSpeed Dashboard',
@@ -66,9 +66,9 @@ const CONFIG = {
   },
 
   COLORS: {
-    GOOD:             '#34A853',
-    NEEDS_IMPROVEMENT: '#FBBC04',
-    POOR:             '#EA4335'
+    GOOD:             '#00C853',  // Яркий изумрудно-зелёный (Material Design Green A700)
+    NEEDS_IMPROVEMENT: '#FF9100',  // Яркий оранжевый (Material Design Orange A700)
+    POOR:             '#FF1744'   // Яркий красный (Material Design Red A400)
   }
 };
 
@@ -156,6 +156,17 @@ function collectPageSpeedData() {
   const startTime = new Date();
 
   try {
+    // ━━━ ПРОВЕРКА КОНФИГУРАЦИИ ЦВЕТОВ ━━━
+    Logger.log(`\n╔════════════════════════════════════════╗`);
+    Logger.log(`║   ПРОВЕРКА КОНФИГУРАЦИИ ЦВЕТОВ        ║`);
+    Logger.log(`╚════════════════════════════════════════╝`);
+    Logger.log(`CONFIG.COLORS.GOOD: ${CONFIG.COLORS.GOOD}`);
+    Logger.log(`CONFIG.COLORS.NEEDS_IMPROVEMENT: ${CONFIG.COLORS.NEEDS_IMPROVEMENT}`);
+    Logger.log(`CONFIG.COLORS.POOR: ${CONFIG.COLORS.POOR}`);
+    Logger.log(`\nCONFIG.THRESHOLDS:`);
+    Logger.log(JSON.stringify(CONFIG.THRESHOLDS, null, 2));
+    Logger.log(`════════════════════════════════════════\n`);
+    
     const sheet   = getOrCreateSheet();
     const urlList = getUrlList();
     const totalUrls = urlList.length;
@@ -703,11 +714,13 @@ function saveDataToUrlBlock(sheet, flatIndex, mobileData, desktopData, dataCol) 
     formatCompactColumn(sheet, startRow, dataCol);
 
     // Цветовое кодирование по thresholds
+    Logger.log(`\n🎨 Применение градиента к колонке ${dataCol}, строка ${startRow}...`);
     applyCompactColorCoding(sheet, startRow, dataCol, mobileData, desktopData);
+    Logger.log(`✅ Градиент применён. Фоновые цвета НЕ применяются для сохранения градиента.`);
 
-    // Фон блоков mobile / desktop в колонке данных
-    sheet.getRange(startRow + 1, dataCol, 4, 1).setBackground('#F0F4FF');
-    sheet.getRange(startRow + 5, dataCol, 4, 1).setBackground('#FFF8F0');
+    // ВАЖНО: Фоновые цвета для блоков mobile/desktop НЕ применяются к колонке данных,
+    // чтобы не перезаписать градиент. Фон применяется только к колонке A (метрики).
+    // Если нужен фон для колонки данных - применяйте его ДО цветового кодирования.
 
     // Примечание для lab данных
     if (mobileData.isLabData || desktopData.isLabData) {
@@ -747,41 +760,118 @@ function formatCompactColumn(sheet, startRow, col) {
 
 function applyCompactColorCoding(sheet, startRow, col, mobileData, desktopData) {
   try {
+    Logger.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    Logger.log(`🎨 НАЧАЛО ПРИМЕНЕНИЯ ЦВЕТОВОГО КОДИРОВАНИЯ`);
+    Logger.log(`Стартовая строка: ${startRow}, Колонка: ${col}`);
+    Logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
     // Mobile
+    Logger.log(`📱 MOBILE данные:`);
+    Logger.log(`LCP: ${mobileData.lcp}, INP: ${mobileData.inp}, CLS: ${mobileData.cls}, Score: ${mobileData.performanceScore}`);
+    
     applyCellColor(sheet, startRow + 1, col, mobileData.lcp,             'LCP');
     applyCellColor(sheet, startRow + 2, col, mobileData.inp,             'INP');
     applyCellColor(sheet, startRow + 3, col, mobileData.cls,             'CLS');
     applyCellColor(sheet, startRow + 4, col, mobileData.performanceScore,'PERFORMANCE');
 
+    Logger.log(`\n🖥️ DESKTOP данные:`);
+    Logger.log(`LCP: ${desktopData.lcp}, INP: ${desktopData.inp}, CLS: ${desktopData.cls}, Score: ${desktopData.performanceScore}`);
+    
     // Desktop
     applyCellColor(sheet, startRow + 5, col, desktopData.lcp,             'LCP');
     applyCellColor(sheet, startRow + 6, col, desktopData.inp,             'INP');
     applyCellColor(sheet, startRow + 7, col, desktopData.cls,             'CLS');
     applyCellColor(sheet, startRow + 8, col, desktopData.performanceScore,'PERFORMANCE');
+    
+    Logger.log(`\n✅ ЦВЕТОВОЕ КОДИРОВАНИЕ ЗАВЕРШЕНО`);
+    Logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
   } catch (error) {
-    Logger.log(`⚠️ Ошибка цветового кодирования: ${error.message}`);
+    Logger.log(`❌ КРИТИЧЕСКАЯ ОШИБКА в applyCompactColorCoding: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    logToSheet(
+      'COLOR_CODING_ERROR',
+      'APPLY_COMPACT_COLOR',
+      'ERROR',
+      `Ошибка цветового кодирования для строки ${startRow}, колонки ${col}`,
+      `${error.message} | Stack: ${error.stack}`
+    );
   }
 }
 
 function applyCellColor(sheet, row, col, value, metricType) {
   try {
     const color = getColorForMetric(value, metricType);
+    
+    // Детальное логирование для отладки
+    Logger.log(`━━━ ПРИМЕНЕНИЕ ЦВЕТА ━━━`);
+    Logger.log(`Ячейка: [${row}, ${col}]`);
+    Logger.log(`Метрика: ${metricType}`);
+    Logger.log(`Значение: ${value}`);
+    Logger.log(`Выбранный цвет: ${color}`);
+    
+    logToSheet(
+      'COLOR_DEBUG',
+      'APPLY_COLOR',
+      'INFO',
+      `Ячейка [${row},${col}] | ${metricType}: ${value}`,
+      `Цвет: ${color}`
+    );
+    
     sheet.getRange(row, col)
       .setBackground(color)
       .setFontColor('white')
       .setFontWeight('bold');
+      
+    Logger.log(`✅ Цвет успешно применён к ячейке [${row}, ${col}]`);
+    
   } catch (error) {
-    Logger.log(`⚠️ Ошибка применения цвета: ${error.message}`);
+    Logger.log(`❌ ОШИБКА применения цвета к ячейке [${row}, ${col}]: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    logToSheet(
+      'COLOR_ERROR',
+      'APPLY_COLOR_ERROR',
+      'ERROR',
+      `Не удалось применить цвет к [${row},${col}]`,
+      `${error.message} | Stack: ${error.stack}`
+    );
   }
 }
 
 function getColorForMetric(value, metricType) {
   const thresholds = CONFIG.THRESHOLDS[metricType];
-  if (!thresholds) return CONFIG.COLORS.GOOD;
-
-  if (value <= thresholds.good)            return CONFIG.COLORS.GOOD;
-  if (value <= thresholds.needsImprovement) return CONFIG.COLORS.NEEDS_IMPROVEMENT;
-  return CONFIG.COLORS.POOR;
+  
+  Logger.log(`━━━ ОПРЕДЕЛЕНИЕ ЦВЕТА ━━━`);
+  Logger.log(`Метрика: ${metricType}`);
+  Logger.log(`Значение: ${value}`);
+  
+  if (!thresholds) {
+    Logger.log(`⚠️ Пороги для метрики "${metricType}" не найдены, используем GOOD`);
+    Logger.log(`Возвращаем цвет: ${CONFIG.COLORS.GOOD}`);
+    return CONFIG.COLORS.GOOD;
+  }
+  
+  Logger.log(`Пороги: good=${thresholds.good}, needsImprovement=${thresholds.needsImprovement}`);
+  Logger.log(`Доступные цвета: GOOD=${CONFIG.COLORS.GOOD}, NEEDS_IMPROVEMENT=${CONFIG.COLORS.NEEDS_IMPROVEMENT}, POOR=${CONFIG.COLORS.POOR}`);
+  
+  let selectedColor;
+  let reason;
+  
+  if (value <= thresholds.good) {
+    selectedColor = CONFIG.COLORS.GOOD;
+    reason = `${value} <= ${thresholds.good} (good)`;
+  } else if (value <= thresholds.needsImprovement) {
+    selectedColor = CONFIG.COLORS.NEEDS_IMPROVEMENT;
+    reason = `${value} <= ${thresholds.needsImprovement} (needsImprovement)`;
+  } else {
+    selectedColor = CONFIG.COLORS.POOR;
+    reason = `${value} > ${thresholds.needsImprovement} (poor)`;
+  }
+  
+  Logger.log(`Логика: ${reason}`);
+  Logger.log(`Выбранный цвет: ${selectedColor}`);
+  
+  return selectedColor;
 }
 
 // ═══════════════════════════════════════════════
@@ -880,10 +970,10 @@ function logToSheet(url, type, status, message, details) {
     logSheet.getRange(newRow, 1, 1, 6).setValues([[timestamp, url, type, status, message, details || '']]);
 
     const statusCell = logSheet.getRange(newRow, 4);
-    if      (status === 'SUCCESS' || status === 'OK')   statusCell.setBackground('#34A853').setFontColor('white');
-    else if (status === 'ERROR'   || status === 'FAIL') statusCell.setBackground('#EA4335').setFontColor('white');
-    else if (status === 'WARNING')                      statusCell.setBackground('#FBBC04').setFontColor('white');
-    else if (status === 'INFO')                         statusCell.setBackground('#4285F4').setFontColor('white');
+    if      (status === 'SUCCESS' || status === 'OK')   statusCell.setBackground('#00C853').setFontColor('white');
+    else if (status === 'ERROR'   || status === 'FAIL') statusCell.setBackground('#FF1744').setFontColor('white');
+    else if (status === 'WARNING')                      statusCell.setBackground('#FF9100').setFontColor('white');
+    else if (status === 'INFO')                         statusCell.setBackground('#2979FF').setFontColor('white');
 
     logSheet.setRowHeight(newRow, 30);
 
@@ -1093,6 +1183,66 @@ function removeTriggers() {
   showAlert('✅ Все триггеры удалены');
 }
 
+// ═══════════════════════════════════════════════
+// ТЕСТИРОВАНИЕ ЦВЕТОВОЙ СХЕМЫ
+// ═══════════════════════════════════════════════
+
+function testColorScheme() {
+  Logger.log('\n╔═══════════════════════════════════════════════╗');
+  Logger.log('║        ТЕСТ ЦВЕТОВОЙ СХЕМЫ                   ║');
+  Logger.log('╚═══════════════════════════════════════════════╝\n');
+  
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const testRow = sheet.getLastRow() + 2;
+    
+    Logger.log(`Создание тестовых ячеек в строке ${testRow}...\n`);
+    
+    // Заголовок теста
+    sheet.getRange(testRow, 1).setValue('🧪 ТЕСТ ЦВЕТОВ:');
+    sheet.getRange(testRow, 1).setFontWeight('bold');
+    
+    // Тест 1: GOOD
+    Logger.log('━━━ Тест 1: GOOD цвет ━━━');
+    sheet.getRange(testRow, 2).setValue('GOOD');
+    applyCellColor(sheet, testRow, 2, 1.5, 'LCP'); // хорошее значение
+    
+    // Тест 2: NEEDS_IMPROVEMENT
+    Logger.log('\n━━━ Тест 2: NEEDS_IMPROVEMENT цвет ━━━');
+    sheet.getRange(testRow, 3).setValue('NEEDS_IMPROVEMENT');
+    applyCellColor(sheet, testRow, 3, 3.5, 'LCP'); // среднее значение
+    
+    // Тест 3: POOR
+    Logger.log('\n━━━ Тест 3: POOR цвет ━━━');
+    sheet.getRange(testRow, 4).setValue('POOR');
+    applyCellColor(sheet, testRow, 4, 5.5, 'LCP'); // плохое значение
+    
+    // Вывод конфигурации
+    Logger.log('\n╔═══════════════════════════════════════════════╗');
+    Logger.log('║        ТЕКУЩАЯ КОНФИГУРАЦИЯ ЦВЕТОВ           ║');
+    Logger.log('╚═══════════════════════════════════════════════╝');
+    Logger.log(`GOOD:              ${CONFIG.COLORS.GOOD}`);
+    Logger.log(`NEEDS_IMPROVEMENT: ${CONFIG.COLORS.NEEDS_IMPROVEMENT}`);
+    Logger.log(`POOR:              ${CONFIG.COLORS.POOR}`);
+    Logger.log('═══════════════════════════════════════════════\n');
+    
+    showAlert(
+      `✅ Тест цветовой схемы выполнен!\n\n` +
+      `Проверьте строку ${testRow} в таблице.\n\n` +
+      `Должны быть видны 3 цвета:\n` +
+      `• Зелёный (${CONFIG.COLORS.GOOD})\n` +
+      `• Оранжевый (${CONFIG.COLORS.NEEDS_IMPROVEMENT})\n` +
+      `• Красный (${CONFIG.COLORS.POOR})\n\n` +
+      `Подробности в логах (Ctrl+Enter или Вид → Логи выполнения)`
+    );
+    
+  } catch (error) {
+    Logger.log(`\n❌ ОШИБКА в testColorScheme: ${error.message}`);
+    Logger.log(`Stack: ${error.stack}`);
+    showAlert(`❌ Ошибка теста: ${error.message}\n\nПроверьте логи выполнения.`);
+  }
+}
+
 function viewCurrentTriggers() {
   const triggers = ScriptApp.getProjectTriggers();
   if (triggers.length === 0) {
@@ -1135,6 +1285,7 @@ function onOpen() {
     .addItem('🔄 Собрать данные для ВСЕХ URL', 'collectPageSpeedData')
     .addSubMenu(urlMenu)
     .addSeparator()
+    .addItem('🧪 Тест цветовой схемы', 'testColorScheme')
     .addItem('📋 Показать список URL', 'manageUrls')
     .addItem('🔨 Пересоздать структуру листа', 'recreateSheet')
     .addSeparator();
