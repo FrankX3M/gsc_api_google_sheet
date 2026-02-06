@@ -1,30 +1,46 @@
 // ============================================
-// PAGESPEED INSIGHTS MONITORING SCRIPT v5.0
-// ============================================
-// Изменения v5.0:
-//   - Группировка URL по доменам
-//   - Компактная таблица: 9 строк на URL (было 18)
-//   - Заголовки доменов с цветовым кодированием
+// PAGESPEED INSIGHTS MONITORING
+// Исправленная версия с улучшенным логированием
+// FIX: Перезапись данных в той же колонке при повторном запуске в тот же день
+// FIX v2: Корректный поиск существующей колонки с датой
 // ============================================
 
 const CONFIG = {
-  API_KEY: 'YOU_API_KEY',
+  API_KEY: 'AIzaSyCBibWwba4qgIoZbTsLjVniunnbh9FUGpI',
 
   // ─── Группировка по доменам ─────────────────
   // Ключ — домен, значение — массив путей.
   // Добавляйте новые домены просто как новые ключи.
+
   DOMAINS: {
-    'example.com': [
-      '/',
-      '/catalog',
-      '/catalog/category_name/',
-      '/product/product_api_name/',
-    ],
-    // 'other-site.com': [
-    //   '/',
-    //   '/about',
-    // ],
-  },
+      '5ka.ru': [
+        '/',
+        '/catalog/',
+        '/catalog/ovoshchi-frukty-orekhi--251C12886/',
+        '/product/ogurets-global-village-agromos-dlinnyy-1sht--3333628/',
+      ],
+      'perekrestok.ru': [
+        '/',   
+        '/delivery',
+        '/delivery/saint-petersburg',
+        '/cat',
+        '/cat/mc/113/moloko-syr-ajca',
+        '/cat/c/114/moloko',
+        '/cat/114/p/moloko-prostokvasino-pasterizovannoe-2-5-bzmz-930ml-2093081',
+        '/cat/b/10310/prostokvasino',
+        '/cat/b/10310/prostokvasino/114/moloko',
+        '/cat/d',
+        '/cat/d/32/salaty',
+        '/shops',
+        '/shops/saint-petersburg',
+      ],
+      'chizhik.club': [
+        '/',
+        '/catalog/inout/',
+        '/catalog/molochnye-produkty-iaitsa/product_moloko-svetaevo-tselnoe-sgushchionnoe-s-sakhar-773/',
+        
+      ],
+    },
 
  // Цвета заголовков для каждого домена (по кругу, если домен больше чем цветов)
   DOMAIN_COLORS: [
@@ -41,10 +57,20 @@ const CONFIG = {
 
   ENABLE_LOGGING: false,
 
-  MAX_RETRIES: 2,
-  RETRY_DELAY: 3,
-  REQUEST_DELAY: 2,
-  MAX_EXECUTION_TIME: 300,
+  MAX_RETRIES: 1,        // Было 2 - уменьшаем до 1 retry
+  RETRY_DELAY: 2,        // Было 3 - уменьшаем задержку
+  REQUEST_DELAY: 1,      // Было 2 - уменьшаем паузу между запросами
+  MAX_EXECUTION_TIME: 330, // Было 300 (5 мин) - увеличиваем до 5.5 минут
+  
+  // Если true - при NO_FCP сразу пропускаем URL (быстрее)
+  // Если false - пытаемся получить lab данные (медленнее, но полнее)
+  SKIP_NO_FCP: false,
+  
+  // Батч-обработка для больших списков URL
+  // Установите BATCH_MODE: true и настройте BATCH_START/BATCH_SIZE
+  BATCH_MODE: false,      // true = обрабатывать только батч
+  BATCH_START: 0,         // с какого URL начинать (0, 5, 10, 15...)
+  BATCH_SIZE: 5,          // сколько URL обработать за раз
 
   // Компактная таблица: 9 строк на URL
   // +0  URL баннер (путь)
@@ -81,26 +107,60 @@ const CONFIG = {
 function buildUrlList() {
   const list = [];
   const domains = Object.keys(CONFIG.DOMAINS);
+  
+  Logger.log(`\n╔═══════════════════════════════════════════════╗`);
+  Logger.log(`║        ПОСТРОЕНИЕ СПИСКА URL                 ║`);
+  Logger.log(`╚═══════════════════════════════════════════════╝`);
+  Logger.log(`Всего доменов в CONFIG: ${domains.length}`);
+  Logger.log(`Список доменов: ${domains.join(', ')}`);
+  
   domains.forEach((domain, dIdx) => {
-    CONFIG.DOMAINS[domain].forEach((path, uIdx) => {
+    Logger.log(`\n━━━ Домен ${dIdx + 1}/${domains.length}: ${domain} ━━━`);
+    
+    const paths = CONFIG.DOMAINS[domain];
+    
+    // Валидация
+    if (!Array.isArray(paths)) {
+      const errorMsg = `CONFIG.DOMAINS['${domain}'] не является массивом!`;
+      Logger.log(`❌ ОШИБКА: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+    
+    Logger.log(`Количество путей: ${paths.length}`);
+    
+    paths.forEach((path, uIdx) => {
       const fullUrl = 'https://' + domain + path;
-      list.push({
+      const urlObj = {
         domain:           domain,
         path:             path,
         fullUrl:          fullUrl,
         domainIndex:      dIdx,
         urlIndexInDomain: uIdx
-      });
+      };
+      list.push(urlObj);
+      Logger.log(`  ${uIdx + 1}. ${fullUrl}`);
     });
   });
+  
+  Logger.log(`\n╔═══════════════════════════════════════════════╗`);
+  Logger.log(`║        ИТОГО ПОСТРОЕНО URL: ${list.length}              ║`);
+  Logger.log(`╚═══════════════════════════════════════════════╝`);
+  
+  // Разбивка по доменам
+  Logger.log(`\nРазбивка по доменам:`);
+  domains.forEach(domain => {
+    const count = list.filter(u => u.domain === domain).length;
+    Logger.log(`  • ${domain}: ${count} URL`);
+  });
+  Logger.log(`${'═'.repeat(50)}\n`);
+  
   return list;
 }
 
-// Кеш списка (пересоздаётся при каждом запуске скрипта)
-let _urlList = null;
+// УБРАНО КЕШИРОВАНИЕ - всегда строим список заново
+// Это критично для корректной работы с триггерами
 function getUrlList() {
-  if (!_urlList) _urlList = buildUrlList();
-  return _urlList;
+  return buildUrlList();
 }
 
 // ═══════════════════════════════════════════════
@@ -156,27 +216,78 @@ function collectPageSpeedData() {
   const startTime = new Date();
 
   try {
-    // ━━━ ПРОВЕРКА КОНФИГУРАЦИИ ЦВЕТОВ ━━━
+    Logger.log(`\n${'═'.repeat(60)}`);
+    Logger.log(`║ ЗАПУСК СБОРА ДАННЫХ PAGESPEED INSIGHTS`);
+    Logger.log(`║ Время старта: ${startTime}`);
+    Logger.log(`${'═'.repeat(60)}\n`);
+    
+    // ━━━ ВАЛИДАЦИЯ КОНФИГУРАЦИИ ━━━
     Logger.log(`\n╔════════════════════════════════════════╗`);
-    Logger.log(`║   ПРОВЕРКА КОНФИГУРАЦИИ ЦВЕТОВ        ║`);
+    Logger.log(`║   ПРОВЕРКА КОНФИГУРАЦИИ               ║`);
     Logger.log(`╚════════════════════════════════════════╝`);
+    
+    Logger.log(`\n--- Цвета ---`);
     Logger.log(`CONFIG.COLORS.GOOD: ${CONFIG.COLORS.GOOD}`);
     Logger.log(`CONFIG.COLORS.NEEDS_IMPROVEMENT: ${CONFIG.COLORS.NEEDS_IMPROVEMENT}`);
     Logger.log(`CONFIG.COLORS.POOR: ${CONFIG.COLORS.POOR}`);
-    Logger.log(`\nCONFIG.THRESHOLDS:`);
-    Logger.log(JSON.stringify(CONFIG.THRESHOLDS, null, 2));
-    Logger.log(`════════════════════════════════════════\n`);
     
-    const sheet   = getOrCreateSheet();
+    Logger.log(`\n--- Пороги ---`);
+    Logger.log(JSON.stringify(CONFIG.THRESHOLDS, null, 2));
+    
+    Logger.log(`\n--- Домены ---`);
+    const domains = Object.keys(CONFIG.DOMAINS);
+    Logger.log(`Количество доменов: ${domains.length}`);
+    domains.forEach((domain, idx) => {
+      const paths = CONFIG.DOMAINS[domain];
+      Logger.log(`${idx + 1}. ${domain}: ${paths.length} путей`);
+      if (!Array.isArray(paths)) {
+        throw new Error(`CONFIG.DOMAINS['${domain}'] не является массивом!`);
+      }
+    });
+    
+    Logger.log(`${'═'.repeat(45)}\n`);
+    
+    // ━━━ ПОСТРОЕНИЕ СПИСКА URL ━━━
     const urlList = getUrlList();
     const totalUrls = urlList.length;
+    
+    // ━━━ БАТЧ-ОБРАБОТКА ━━━
+    let urlsToProcess = urlList;
+    let batchInfo = '';
+    
+    if (CONFIG.BATCH_MODE) {
+      const batchStart = CONFIG.BATCH_START;
+      const batchEnd = Math.min(CONFIG.BATCH_START + CONFIG.BATCH_SIZE, totalUrls);
+      urlsToProcess = urlList.slice(batchStart, batchEnd);
+      batchInfo = `БАТЧ-РЕЖИМ: обработка URL ${batchStart + 1}-${batchEnd} из ${totalUrls}`;
+      
+      Logger.log(`\n╔════════════════════════════════════════╗`);
+      Logger.log(`║   БАТЧ-РЕЖИМ АКТИВЕН                  ║`);
+      Logger.log(`╚════════════════════════════════════════╝`);
+      Logger.log(`Всего URL в конфиге: ${totalUrls}`);
+      Logger.log(`Обрабатываем: ${batchStart + 1}-${batchEnd} (${urlsToProcess.length} URL)`);
+      Logger.log(`${'═'.repeat(45)}\n`);
+      
+      logToSheet('BATCH', 'INFO', 'INFO', batchInfo, `Start: ${batchStart}, Size: ${CONFIG.BATCH_SIZE}`);
+    }
+    
+    Logger.log(`\n╔════════════════════════════════════════╗`);
+    Logger.log(`║   ГОТОВ К ОБРАБОТКЕ ${urlsToProcess.length} URL           ║`);
+    Logger.log(`╚════════════════════════════════════════╝\n`);
 
-    Logger.log('=== НАЧАЛО СБОРА ДАННЫХ ===');
-    Logger.log(`Время старта: ${startTime}`);
-    Logger.log(`Количество URL: ${totalUrls}`);
+    const sheet = getOrCreateSheet();
 
-    logToSheet('ALL', 'СТАРТ', 'INFO', `Начало сбора данных для ${totalUrls} URL`, `Время: ${startTime}`);
-    showToast(`🔄 Начинаем сбор данных для ${totalUrls} URL...`, 5);
+    const startMessage = CONFIG.BATCH_MODE 
+      ? `Начало сбора данных (БАТЧ ${CONFIG.BATCH_START + 1}-${Math.min(CONFIG.BATCH_START + CONFIG.BATCH_SIZE, totalUrls)} из ${totalUrls})`
+      : `Начало сбора данных для ${totalUrls} URL`;
+    
+    logToSheet('ALL', 'СТАРТ', 'INFO', startMessage, `Время: ${startTime}`);
+    
+    const toastMessage = CONFIG.BATCH_MODE
+      ? `🔄 Батч-режим: обработка ${urlsToProcess.length} URL...`
+      : `🔄 Начинаем сбор данных для ${totalUrls} URL...`;
+    
+    showToast(toastMessage, 5);
 
     const todayCol = getTodayColumn(sheet);
 
@@ -194,27 +305,60 @@ function collectPageSpeedData() {
     const errors  = [];
     const results = [];
 
-    for (let index = 0; index < urlList.length; index++) {
-      const item = urlList[index];
-      const urlNumber = index + 1;
+    // ━━━ ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ URL ━━━
+    Logger.log(`\n${'═'.repeat(60)}`);
+    Logger.log(`║ НАЧАЛО ОСНОВНОГО ЦИКЛА`);
+    Logger.log(`║ Всего URL к обработке: ${urlsToProcess.length}`);
+    if (CONFIG.BATCH_MODE) {
+      Logger.log(`║ БАТЧ-РЕЖИМ: URL ${CONFIG.BATCH_START + 1}-${Math.min(CONFIG.BATCH_START + CONFIG.BATCH_SIZE, totalUrls)}`);
+    }
+    Logger.log(`${'═'.repeat(60)}\n`);
+    
+    for (let index = 0; index < urlsToProcess.length; index++) {
+      const item = urlsToProcess[index];
+      const actualIndex = CONFIG.BATCH_MODE ? CONFIG.BATCH_START + index : index;
+      const urlNumber = actualIndex + 1;
+      
+      Logger.log(`\n╔═══════════════════════════════════════════════╗`);
+      Logger.log(`║ НАЧАЛО ОБРАБОТКИ URL ${urlNumber}/${totalUrls}`);
+      Logger.log(`╚═══════════════════════════════════════════════╝`);
+      Logger.log(`Домен: ${item.domain}`);
+      Logger.log(`Индекс домена: ${item.domainIndex}`);
+      Logger.log(`Индекс URL в домене: ${item.urlIndexInDomain}`);
+      Logger.log(`Путь: ${item.path}`);
+      Logger.log(`Полный URL: ${item.fullUrl}`);
+      Logger.log(`═══════════════════════════════════════════════\n`);
 
       // Проверка лимита времени
       const elapsedTime = (new Date() - startTime) / 1000;
       if (elapsedTime > CONFIG.MAX_EXECUTION_TIME) {
-        Logger.log(`⚠️ Приближение к лимиту времени (${Math.round(elapsedTime)}с). Останавливаем.`);
+        Logger.log(`\n⚠️ ${'═'.repeat(50)}`);
+        Logger.log(`⚠️ ПРИБЛИЖЕНИЕ К ЛИМИТУ ВРЕМЕНИ`);
+        Logger.log(`⚠️ Прошло: ${Math.round(elapsedTime)} сек`);
+        Logger.log(`⚠️ Лимит: ${CONFIG.MAX_EXECUTION_TIME} сек`);
+        Logger.log(`⚠️ Останавливаем обработку`);
+        Logger.log(`⚠️ ${'═'.repeat(50)}\n`);
+        
         logToSheet('ALL', 'ТАЙМАУТ', 'WARNING', 'Превышен лимит времени выполнения',
-          `Обработано: ${successCount}/${totalUrls}, Время: ${Math.round(elapsedTime)}с`);
-        timeoutCount = totalUrls - index;
+          `Обработано: ${successCount}/${urlsToProcess.length}, Время: ${Math.round(elapsedTime)}с`);
+        timeoutCount = urlsToProcess.length - index;
         break;
       }
 
       try {
-        Logger.log(`\n=== URL ${urlNumber}/${totalUrls}: ${item.fullUrl} ===`);
-        logToSheet(item.fullUrl, 'ОБРАБОТКА', 'INFO', `Начало обработки URL ${urlNumber}/${totalUrls}`, '');
+        Logger.log(`\n${'═'.repeat(60)}`);
+        Logger.log(`║ URL ${urlNumber}/${totalUrls}`);
+        Logger.log(`║ Домен: ${item.domain} (индекс ${item.domainIndex})`);
+        Logger.log(`║ Путь: ${item.path}`);
+        Logger.log(`║ Полный URL: ${item.fullUrl}`);
+        Logger.log(`║ Прошло времени: ${Math.round(elapsedTime)} сек`);
+        Logger.log(`${'═'.repeat(60)}`);
+        
+        logToSheet(item.fullUrl, 'ОБРАБОТКА', 'INFO', `Начало обработки URL ${urlNumber}/${totalUrls}`, `Домен: ${item.domain}`);
         showToast(`🔄 Обработка ${urlNumber}/${totalUrls}: ${item.domain}${item.path}`, 3);
 
         // Mobile
-        Logger.log('Запрос Mobile данных...');
+        Logger.log(`\n📱 Запрос Mobile данных...`);
         logToSheet(item.fullUrl, 'API REQUEST', 'INFO', 'Запрос Mobile данных', '');
         const mobileData = fetchDataWithRetry(item.fullUrl, 'mobile');
         validateData(mobileData, 'Mobile');
@@ -225,7 +369,7 @@ function collectPageSpeedData() {
         Utilities.sleep(CONFIG.REQUEST_DELAY * 1000);
 
         // Desktop
-        Logger.log('Запрос Desktop данных...');
+        Logger.log(`\n🖥️ Запрос Desktop данных...`);
         logToSheet(item.fullUrl, 'API REQUEST', 'INFO', 'Запрос Desktop данных', '');
         const desktopData = fetchDataWithRetry(item.fullUrl, 'desktop');
         validateData(desktopData, 'Desktop');
@@ -234,16 +378,28 @@ function collectPageSpeedData() {
           `Full data: ${JSON.stringify(desktopData)}`);
 
         // Сохраняем
-        saveDataToUrlBlock(sheet, index, mobileData, desktopData, todayCol);
+        Logger.log(`\n💾 Сохранение данных в таблицу...`);
+        saveDataToUrlBlock(sheet, actualIndex, mobileData, desktopData, todayCol);
 
         successCount++;
-        results.push({ url: item.fullUrl, status: 'success', mobile: Math.round(mobileData.performanceScore), desktop: Math.round(desktopData.performanceScore) });
+        results.push({ 
+          url: item.fullUrl, 
+          status: 'success', 
+          mobile: Math.round(mobileData.performanceScore), 
+          desktop: Math.round(desktopData.performanceScore) 
+        });
 
-        Logger.log(`✅ URL ${urlNumber} обработан успешно`);
+        Logger.log(`\n✅ URL ${urlNumber} обработан успешно`);
+        Logger.log(`   Mobile Score: ${Math.round(mobileData.performanceScore)}`);
+        Logger.log(`   Desktop Score: ${Math.round(desktopData.performanceScore)}`);
+        
         logToSheet(item.fullUrl, 'ЗАВЕРШЕНО', 'SUCCESS', 'URL обработан успешно',
           `Mobile: ${Math.round(mobileData.performanceScore)}, Desktop: ${Math.round(desktopData.performanceScore)}`);
 
-        if (index < urlList.length - 1) Utilities.sleep(CONFIG.REQUEST_DELAY * 1000);
+        if (index < urlsToProcess.length - 1) {
+          Logger.log(`\n⏸️ Пауза ${CONFIG.REQUEST_DELAY} сек перед следующим URL...`);
+          Utilities.sleep(CONFIG.REQUEST_DELAY * 1000);
+        }
 
       } catch (error) {
         errorCount++;
@@ -251,27 +407,65 @@ function collectPageSpeedData() {
         errors.push(errorMsg);
         results.push({ url: item.fullUrl, status: 'error', error: error.message });
 
-        Logger.log(`❌ Ошибка для URL ${urlNumber}: ${error.message}`);
+        Logger.log(`\n❌ ${'═'.repeat(60)}`);
+        Logger.log(`❌ ОШИБКА для URL ${urlNumber}/${totalUrls}`);
+        Logger.log(`❌ Домен: ${item.domain}`);
+        Logger.log(`❌ URL: ${item.fullUrl}`);
+        Logger.log(`❌ Сообщение: ${error.message}`);
+        Logger.log(`❌ Stack: ${error.stack || 'N/A'}`);
+        
+        // Проверяем тип ошибки
+        if (error.message.includes('NO_FCP') || error.message.includes('NO_LCP')) {
+          Logger.log(`⚠️ Это ошибка NO_FCP - URL будет пропущен`);
+          Logger.log(`✅ ПРОДОЛЖАЕМ обработку следующих URL...`);
+        } else {
+          Logger.log(`⚠️ Это другая ошибка - продолжаем обработку`);
+        }
+        
+        Logger.log(`❌ ${'═'.repeat(60)}\n`);
+        
         logToSheet(item.fullUrl, 'ОШИБКА', 'ERROR', error.message, `Stack: ${error.stack || 'N/A'}`);
+        
+        // НЕ прерываем выполнение - продолжаем со следующим URL
       }
+      
+      // Логирование прогресса после обработки URL (успех или ошибка)
+      const progressTotal = CONFIG.BATCH_MODE ? urlsToProcess.length : totalUrls;
+      Logger.log(`\n📊 ПРОГРЕСС: Обработано ${index + 1}/${progressTotal} URL`);
+      Logger.log(`   ✅ Успешно: ${successCount}`);
+      Logger.log(`   ❌ Ошибок: ${errorCount}`);
+      Logger.log(`   ⏱️ Прошло времени: ${Math.round((new Date() - startTime) / 1000)} сек\n`);
     }
 
     // ── Итоги ──
     const endTime  = new Date();
     const duration = Math.round((endTime - startTime) / 1000);
 
-    Logger.log('\n=== ИТОГИ ===');
+    Logger.log(`\n${'═'.repeat(60)}`);
+    Logger.log(`║ ИТОГИ СБОРА ДАННЫХ`);
+    if (CONFIG.BATCH_MODE) {
+      Logger.log(`║ БАТЧ-РЕЖИМ: URL ${CONFIG.BATCH_START + 1}-${Math.min(CONFIG.BATCH_START + CONFIG.BATCH_SIZE, totalUrls)} из ${totalUrls}`);
+    }
+    Logger.log(`${'═'.repeat(60)}`);
     Logger.log(`Время завершения: ${endTime}`);
-    Logger.log(`Продолжительность: ${duration} сек`);
-    Logger.log(`Успешно: ${successCount}/${totalUrls}`);
-    Logger.log(`Ошибок: ${errorCount}/${totalUrls}`);
+    Logger.log(`Продолжительность: ${duration} сек (${Math.floor(duration/60)}м ${duration%60}с)`);
+    Logger.log(`Успешно обработано: ${successCount}/${urlsToProcess.length}`);
+    Logger.log(`Ошибок: ${errorCount}/${urlsToProcess.length}`);
+    if (timeoutCount > 0) {
+      Logger.log(`Не обработано (таймаут): ${timeoutCount}/${urlsToProcess.length}`);
+    }
+    Logger.log(`${'═'.repeat(60)}\n`);
 
+    const finalTotal = CONFIG.BATCH_MODE ? urlsToProcess.length : totalUrls;
     logToSheet('ALL', 'ЗАВЕРШЕНИЕ', 'INFO', 'Сбор данных завершен',
-      `Успешно: ${successCount}/${totalUrls}, Ошибок: ${errorCount}, Время: ${duration}с`);
+      `Успешно: ${successCount}/${finalTotal}, Ошибок: ${errorCount}, Время: ${duration}с`);
 
-    let resultMessage = '✅ Сбор данных завершен!\n\n';
-    resultMessage += `Время выполнения: ${duration} сек\n`;
-    resultMessage += `Успешно: ${successCount}/${totalUrls}\n`;
+    let resultMessage = CONFIG.BATCH_MODE 
+      ? `✅ Батч-режим завершен!\n\nОбработано URL: ${CONFIG.BATCH_START + 1}-${Math.min(CONFIG.BATCH_START + CONFIG.BATCH_SIZE, totalUrls)} из ${totalUrls}\n\n`
+      : '✅ Сбор данных завершен!\n\n';
+    
+    resultMessage += `Время выполнения: ${duration} сек (${Math.floor(duration/60)}м ${duration%60}с)\n`;
+    resultMessage += `Успешно: ${successCount}/${finalTotal}\n`;
 
     if (errorCount > 0) {
       resultMessage += `Ошибок: ${errorCount}\n`;
@@ -296,8 +490,13 @@ function collectPageSpeedData() {
     showAlert(resultMessage);
 
   } catch (error) {
-    Logger.log(`❌ КРИТИЧЕСКАЯ ОШИБКА: ${error.message}`);
-    Logger.log(`Stack trace: ${error.stack}`);
+    Logger.log(`\n❌ ${'═'.repeat(60)}`);
+    Logger.log(`❌ КРИТИЧЕСКАЯ ОШИБКА`);
+    Logger.log(`❌ ${'═'.repeat(60)}`);
+    Logger.log(`❌ Сообщение: ${error.message}`);
+    Logger.log(`❌ Stack trace: ${error.stack}`);
+    Logger.log(`❌ ${'═'.repeat(60)}\n`);
+    
     logToSheet('ALL', 'КРИТИЧЕСКАЯ ОШИБКА', 'ERROR', error.message, `Stack: ${error.stack}`);
     handleError(error);
   }
@@ -310,16 +509,25 @@ function collectPageSpeedData() {
 function collectDataForSingleUrl(urlIndex) {
   try {
     const urlList = getUrlList();
+    
+    Logger.log(`\n╔════════════════════════════════════════╗`);
+    Logger.log(`║   СБОР ДАННЫХ ДЛЯ ОДНОГО URL          ║`);
+    Logger.log(`╚════════════════════════════════════════╝`);
+    Logger.log(`Индекс URL: ${urlIndex}`);
+    Logger.log(`Всего URL в списке: ${urlList.length}`);
+    
     if (urlIndex < 0 || urlIndex >= urlList.length) {
-      throw new Error(`Неверный индекс URL: ${urlIndex}`);
+      throw new Error(`Неверный индекс URL: ${urlIndex}. Доступны индексы от 0 до ${urlList.length - 1}`);
     }
 
     const sheet = getOrCreateSheet();
     const item  = urlList[urlIndex];
     const urlNumber = urlIndex + 1;
 
-    Logger.log(`\n=== СБОР ДАННЫХ ДЛЯ URL ${urlNumber} ===`);
-    Logger.log(`URL: ${item.fullUrl}`);
+    Logger.log(`\nURL: ${item.fullUrl}`);
+    Logger.log(`Домен: ${item.domain}`);
+    Logger.log(`Путь: ${item.path}`);
+    Logger.log(`${'═'.repeat(45)}\n`);
 
     showToast(`🔄 Сбор данных для ${item.domain}${item.path}...`, 5);
 
@@ -332,21 +540,28 @@ function collectDataForSingleUrl(urlIndex) {
       .setBackground('#F3F3F3')
       .setHorizontalAlignment('center');
 
+    Logger.log(`📱 Запрос Mobile данных...`);
     const mobileData  = fetchDataWithRetry(item.fullUrl, 'mobile');
     validateData(mobileData, 'Mobile');
+    Logger.log(`✅ Mobile данные получены: Score ${Math.round(mobileData.performanceScore)}`);
 
     Utilities.sleep(CONFIG.REQUEST_DELAY * 1000);
 
+    Logger.log(`\n🖥️ Запрос Desktop данных...`);
     const desktopData = fetchDataWithRetry(item.fullUrl, 'desktop');
     validateData(desktopData, 'Desktop');
+    Logger.log(`✅ Desktop данные получены: Score ${Math.round(desktopData.performanceScore)}`);
 
+    Logger.log(`\n💾 Сохранение данных в таблицу...`);
     saveDataToUrlBlock(sheet, urlIndex, mobileData, desktopData, todayCol);
 
-    Logger.log('✅ Данные успешно собраны');
+    Logger.log(`\n✅ Данные успешно собраны и сохранены\n`);
     showAlert(`✅ Данные успешно обновлены для:\n${item.fullUrl}\n\nMobile: ${Math.round(mobileData.performanceScore)}\nDesktop: ${Math.round(desktopData.performanceScore)}`);
 
   } catch (error) {
-    Logger.log(`❌ Ошибка: ${error.message}`);
+    Logger.log(`\n❌ Ошибка при сборе данных для одного URL:`);
+    Logger.log(`❌ ${error.message}`);
+    Logger.log(`❌ Stack: ${error.stack}\n`);
     handleError(error);
   }
 }
@@ -360,30 +575,37 @@ function fetchDataWithRetry(url, strategy) {
 
   for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
     try {
-      Logger.log(`Попытка ${attempt}/${CONFIG.MAX_RETRIES} для ${strategy}`);
+      Logger.log(`  Попытка ${attempt}/${CONFIG.MAX_RETRIES} для ${strategy}`);
 
       if (attempt > 1) {
         const delay = CONFIG.RETRY_DELAY + (attempt * 2);
-        Logger.log(`Ждем ${delay} секунд перед повторной попыткой...`);
+        Logger.log(`  Ждем ${delay} секунд перед повторной попыткой...`);
         logToSheet(url, 'RETRY', 'WARNING', `Повторная попытка ${attempt}/${CONFIG.MAX_RETRIES} для ${strategy}`, `Задержка: ${delay}с`);
         Utilities.sleep(delay * 1000);
       }
 
       const data = fetchPageSpeedData(url, strategy);
       if (data) {
-        Logger.log(`✅ Данные получены для ${strategy}`);
+        Logger.log(`  ✅ Данные получены для ${strategy}`);
         return data;
       }
 
     } catch (error) {
       lastError = error;
-      Logger.log(`❌ Попытка ${attempt} неудачна: ${error.message}`);
+      Logger.log(`  ❌ Попытка ${attempt} неудачна: ${error.message}`);
 
       if (error.message.includes('NO_FCP') || error.message.includes('NO_LCP')) {
         logToSheet(url, 'NO_FCP ERROR', 'WARNING', `Страница не загрузилась (попытка ${attempt})`, error.message);
 
         if (attempt === CONFIG.MAX_RETRIES) {
-          Logger.log('⚠️ Пробуем получить lab данные вместо field данных...');
+          // Проверяем опцию - пропускать или пытаться получить lab данные
+          if (CONFIG.SKIP_NO_FCP) {
+            Logger.log('  ⚠️ SKIP_NO_FCP=true - пропускаем URL без получения lab данных');
+            logToSheet(url, 'SKIPPED', 'WARNING', `URL пропущен (NO_FCP, SKIP_NO_FCP=true)`, error.message);
+            throw new Error(`NO_FCP: URL пропущен согласно настройке SKIP_NO_FCP`);
+          }
+          
+          Logger.log('  ⚠️ Пробуем получить lab данные вместо field данных...');
           try {
             const labData = fetchPageSpeedDataLabOnly(url, strategy);
             if (labData) {
@@ -391,7 +613,7 @@ function fetchDataWithRetry(url, strategy) {
               return labData;
             }
           } catch (labError) {
-            Logger.log(`Не удалось получить даже lab данные: ${labError.message}`);
+            Logger.log(`  Не удалось получить даже lab данные: ${labError.message}`);
           }
         }
       }
@@ -437,7 +659,7 @@ function fetchPageSpeedData(url, strategy) {
     return extractMetrics(json, url, strategy);
 
   } catch (error) {
-    Logger.log('Ошибка API: ' + error.message);
+    Logger.log('  Ошибка API: ' + error.message);
     logToSheet(url, 'EXCEPTION', 'ERROR', `Исключение в fetchPageSpeedData (${strategy})`, error.stack || error.message);
     throw error;
   }
@@ -465,7 +687,7 @@ function fetchPageSpeedDataLabOnly(url, strategy) {
     return extractLabMetrics(json, url, strategy);
 
   } catch (error) {
-    Logger.log('Ошибка Lab API: ' + error.message);
+    Logger.log('  Ошибка Lab API: ' + error.message);
     throw error;
   }
 }
@@ -530,7 +752,7 @@ function validateData(data, deviceName) {
   if (data.lcp === 0 && data.cls === 0 && data.performanceScore === 0) {
     throw new Error(`Все метрики для ${deviceName} равны 0`);
   }
-  Logger.log(`✅ Данные ${deviceName} валидны`);
+  Logger.log(`  ✅ Данные ${deviceName} валидны`);
 }
 
 // ═══════════════════════════════════════════════
@@ -579,20 +801,24 @@ function initializeSheet(sheet) {
     const urlList = getUrlList();
     let prevDomain = null;
 
+    Logger.log(`\nИнициализация блоков для ${urlList.length} URL...`);
+
     urlList.forEach((item, flatIndex) => {
       // Если новый домен — рисуем заголовок-разделитель домена
       if (item.domain !== prevDomain) {
         const domainHeaderRow = getDomainHeaderRow(item.domainIndex);
+        Logger.log(`  Заголовок домена "${item.domain}" в строке ${domainHeaderRow}`);
         initializeDomainHeader(sheet, domainHeaderRow, item.domain, item.domainIndex);
         prevDomain = item.domain;
       }
 
       // Блок URL
       const startRow = getStartRowForUrl(flatIndex);
+      Logger.log(`  URL ${flatIndex + 1}: "${item.path}" начинается со строки ${startRow}`);
       initializeUrlBlock(sheet, startRow, item);
     });
 
-    Logger.log('✅ Лист инициализирован');
+    Logger.log('✅ Лист инициализирован\n');
 
   } catch (error) {
     Logger.log(`❌ Ошибка инициализации листа: ${error.message}`);
@@ -686,6 +912,8 @@ function saveDataToUrlBlock(sheet, flatIndex, mobileData, desktopData, dataCol) 
   try {
     const startRow = getStartRowForUrl(flatIndex);
 
+    Logger.log(`  Сохранение в строку ${startRow}, колонку ${dataCol}`);
+
     // Компактная структура значений (9 строк):
     // +0  — пустой (баннер URL, уже заполнен)
     // +1  📱 LCP
@@ -714,13 +942,8 @@ function saveDataToUrlBlock(sheet, flatIndex, mobileData, desktopData, dataCol) 
     formatCompactColumn(sheet, startRow, dataCol);
 
     // Цветовое кодирование по thresholds
-    Logger.log(`\n🎨 Применение градиента к колонке ${dataCol}, строка ${startRow}...`);
+    Logger.log(`  Применение цветового кодирования...`);
     applyCompactColorCoding(sheet, startRow, dataCol, mobileData, desktopData);
-    Logger.log(`✅ Градиент применён. Фоновые цвета НЕ применяются для сохранения градиента.`);
-
-    // ВАЖНО: Фоновые цвета для блоков mobile/desktop НЕ применяются к колонке данных,
-    // чтобы не перезаписать градиент. Фон применяется только к колонке A (метрики).
-    // Если нужен фон для колонки данных - применяйте его ДО цветового кодирования.
 
     // Примечание для lab данных
     if (mobileData.isLabData || desktopData.isLabData) {
@@ -732,10 +955,10 @@ function saveDataToUrlBlock(sheet, flatIndex, mobileData, desktopData, dataCol) 
     }
 
     sheet.autoResizeColumn(dataCol);
-    Logger.log('✅ Данные сохранены');
+    Logger.log(`  ✅ Данные сохранены`);
 
   } catch (error) {
-    Logger.log(`❌ Ошибка сохранения: ${error.message}`);
+    Logger.log(`  ❌ Ошибка сохранения: ${error.message}`);
     throw error;
   }
 }
@@ -754,41 +977,32 @@ function formatCompactColumn(sheet, startRow, col) {
     sheet.getRange(startRow + 7, col).setNumberFormat('0.000');  // CLS
     sheet.getRange(startRow + 8, col).setNumberFormat('0');      // Score
   } catch (error) {
-    Logger.log(`⚠️ Ошибка форматирования: ${error.message}`);
+    Logger.log(`  ⚠️ Ошибка форматирования: ${error.message}`);
   }
 }
 
 function applyCompactColorCoding(sheet, startRow, col, mobileData, desktopData) {
   try {
-    Logger.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    Logger.log(`🎨 НАЧАЛО ПРИМЕНЕНИЯ ЦВЕТОВОГО КОДИРОВАНИЯ`);
-    Logger.log(`Стартовая строка: ${startRow}, Колонка: ${col}`);
-    Logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-    
-    // Mobile
-    Logger.log(`📱 MOBILE данные:`);
-    Logger.log(`LCP: ${mobileData.lcp}, INP: ${mobileData.inp}, CLS: ${mobileData.cls}, Score: ${mobileData.performanceScore}`);
+    Logger.log(`  📱 Mobile метрики:`);
+    Logger.log(`     LCP: ${mobileData.lcp}, INP: ${mobileData.inp}, CLS: ${mobileData.cls}, Score: ${mobileData.performanceScore}`);
     
     applyCellColor(sheet, startRow + 1, col, mobileData.lcp,             'LCP');
     applyCellColor(sheet, startRow + 2, col, mobileData.inp,             'INP');
     applyCellColor(sheet, startRow + 3, col, mobileData.cls,             'CLS');
     applyCellColor(sheet, startRow + 4, col, mobileData.performanceScore,'PERFORMANCE');
 
-    Logger.log(`\n🖥️ DESKTOP данные:`);
-    Logger.log(`LCP: ${desktopData.lcp}, INP: ${desktopData.inp}, CLS: ${desktopData.cls}, Score: ${desktopData.performanceScore}`);
+    Logger.log(`  🖥️ Desktop метрики:`);
+    Logger.log(`     LCP: ${desktopData.lcp}, INP: ${desktopData.inp}, CLS: ${desktopData.cls}, Score: ${desktopData.performanceScore}`);
     
-    // Desktop
     applyCellColor(sheet, startRow + 5, col, desktopData.lcp,             'LCP');
     applyCellColor(sheet, startRow + 6, col, desktopData.inp,             'INP');
     applyCellColor(sheet, startRow + 7, col, desktopData.cls,             'CLS');
     applyCellColor(sheet, startRow + 8, col, desktopData.performanceScore,'PERFORMANCE');
     
-    Logger.log(`\n✅ ЦВЕТОВОЕ КОДИРОВАНИЕ ЗАВЕРШЕНО`);
-    Logger.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    Logger.log(`  ✅ Цветовое кодирование применено`);
     
   } catch (error) {
-    Logger.log(`❌ КРИТИЧЕСКАЯ ОШИБКА в applyCompactColorCoding: ${error.message}`);
-    Logger.log(`Stack: ${error.stack}`);
+    Logger.log(`  ❌ Ошибка цветового кодирования: ${error.message}`);
     logToSheet(
       'COLOR_CODING_ERROR',
       'APPLY_COMPACT_COLOR',
@@ -803,31 +1017,13 @@ function applyCellColor(sheet, row, col, value, metricType) {
   try {
     const color = getColorForMetric(value, metricType);
     
-    // Детальное логирование для отладки
-    Logger.log(`━━━ ПРИМЕНЕНИЕ ЦВЕТА ━━━`);
-    Logger.log(`Ячейка: [${row}, ${col}]`);
-    Logger.log(`Метрика: ${metricType}`);
-    Logger.log(`Значение: ${value}`);
-    Logger.log(`Выбранный цвет: ${color}`);
-    
-    logToSheet(
-      'COLOR_DEBUG',
-      'APPLY_COLOR',
-      'INFO',
-      `Ячейка [${row},${col}] | ${metricType}: ${value}`,
-      `Цвет: ${color}`
-    );
-    
     sheet.getRange(row, col)
       .setBackground(color)
       .setFontColor('white')
       .setFontWeight('bold');
       
-    Logger.log(`✅ Цвет успешно применён к ячейке [${row}, ${col}]`);
-    
   } catch (error) {
-    Logger.log(`❌ ОШИБКА применения цвета к ячейке [${row}, ${col}]: ${error.message}`);
-    Logger.log(`Stack: ${error.stack}`);
+    Logger.log(`     ❌ Ошибка применения цвета к ячейке [${row}, ${col}]: ${error.message}`);
     logToSheet(
       'COLOR_ERROR',
       'APPLY_COLOR_ERROR',
@@ -841,69 +1037,94 @@ function applyCellColor(sheet, row, col, value, metricType) {
 function getColorForMetric(value, metricType) {
   const thresholds = CONFIG.THRESHOLDS[metricType];
   
-  Logger.log(`━━━ ОПРЕДЕЛЕНИЕ ЦВЕТА ━━━`);
-  Logger.log(`Метрика: ${metricType}`);
-  Logger.log(`Значение: ${value}`);
-  
   if (!thresholds) {
-    Logger.log(`⚠️ Пороги для метрики "${metricType}" не найдены, используем GOOD`);
-    Logger.log(`Возвращаем цвет: ${CONFIG.COLORS.GOOD}`);
+    Logger.log(`     ⚠️ Пороги для "${metricType}" не найдены, используем GOOD`);
     return CONFIG.COLORS.GOOD;
   }
   
-  Logger.log(`Пороги: good=${thresholds.good}, needsImprovement=${thresholds.needsImprovement}`);
-  Logger.log(`Доступные цвета: GOOD=${CONFIG.COLORS.GOOD}, NEEDS_IMPROVEMENT=${CONFIG.COLORS.NEEDS_IMPROVEMENT}, POOR=${CONFIG.COLORS.POOR}`);
-  
-  let selectedColor;
-  let reason;
-  
   if (value <= thresholds.good) {
-    selectedColor = CONFIG.COLORS.GOOD;
-    reason = `${value} <= ${thresholds.good} (good)`;
+    return CONFIG.COLORS.GOOD;
   } else if (value <= thresholds.needsImprovement) {
-    selectedColor = CONFIG.COLORS.NEEDS_IMPROVEMENT;
-    reason = `${value} <= ${thresholds.needsImprovement} (needsImprovement)`;
+    return CONFIG.COLORS.NEEDS_IMPROVEMENT;
   } else {
-    selectedColor = CONFIG.COLORS.POOR;
-    reason = `${value} > ${thresholds.needsImprovement} (poor)`;
+    return CONFIG.COLORS.POOR;
   }
-  
-  Logger.log(`Логика: ${reason}`);
-  Logger.log(`Выбранный цвет: ${selectedColor}`);
-  
-  return selectedColor;
 }
 
 // ═══════════════════════════════════════════════
-// КОЛОНКА ДАТЫ  ←  ИЗМЕНЕНА: новые данные всегда в колонке B
-// ═══════════════════════════════════════════════
-// Логика:
-//   1. Если в колонке B (row 2) уже стоит сегодняшняя дата — просто возвращаем 2.
-//   2. Иначе вставляем новую пустую колонку после A.
-//      Все существующие данные (B, C, D …) автоматически сдвигаются вправо (→ C, D, E …).
-//      Возвращаем 2 (свежая колонка B).
+// КОЛОНКА ДАТЫ (ИСПРАВЛЕННАЯ ВЕРСИЯ - FIX v2)
+// FIX: Корректный поиск существующей колонки с датой
 // ═══════════════════════════════════════════════
 
 function getTodayColumn(sheet) {
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd.MM.yyyy');
+  Logger.log(`\nПоиск колонки для даты: ${today}`);
 
-  // Проверяем колонку B (индекс 2) — есть ли уже сегодня?
-  const existingValue = sheet.getRange(2, 2).getValue();
-  if (existingValue && existingValue.toString() === today) {
-    Logger.log('Колонка B уже содержит сегодняшнюю дату — используем её');
-    return 2;
+  const maxCol = Math.max(sheet.getLastColumn() || 2, 26);   // минимум до Z
+  let foundCol = 0;
+
+  // 1. Ищем существующую колонку с ТОЧНО такой же датой
+  for (let col = 2; col <= maxCol + 5; col++) {  // +5 на случай «дырок»
+    const cell = sheet.getRange(2, col);
+    let value;
+
+    try {
+      value = cell.getValue();
+    } catch (e) {
+      // колонка физически не существует → дальше искать бессмысленно
+      break;
+    }
+
+    if (!value) continue;
+
+    // Приводим к строке в нужном формате
+    let dateStr = '';
+    if (value instanceof Date) {
+      dateStr = Utilities.formatDate(value, Session.getScriptTimeZone(), 'dd.MM.yyyy');
+    } else {
+      dateStr = value.toString().trim();
+    }
+
+    Logger.log(`  колонка ${col} → "${dateStr}"`);
+
+    if (dateStr === today) {
+      Logger.log(`→ НАЙДЕНА существующая колонка ${col}`);
+      foundCol = col;
+      break;
+    }
   }
 
-  // Если в колонке B есть старые данные (или пуста, но лист не новый) — вставляем колонку
-  // sheet.insertColumnAfter(1) => вставляет новую колонку после столбца A,
-  // сдвигая B→C, C→D и т.д.
-  if (sheet.getLastColumn() >= 2) {
-    sheet.insertColumnAfter(1);
-    Logger.log('Вставлена новая колонка B; старые данные сдвинуты вправо');
+  if (foundCol > 0) {
+    // нашли → перезаписываем сюда
+    Logger.log(`Используем существующую колонку ${foundCol} (перезапись)`);
+    return foundCol;
   }
 
-  // Теперь колонка B — свежая и пустая
-  return 2;
+  // 2. Не нашли → ищем первую пустую колонку после A
+  Logger.log(`Колонка с ${today} не найдена → ищем свободное место`);
+
+  for (let col = 2; col <= maxCol + 10; col++) {
+    const cell = sheet.getRange(2, col);
+    let value;
+
+    try {
+      value = cell.getValue();
+    } catch (e) {
+      // дошли до несуществующих колонок → используем эту
+      Logger.log(`→ Используем новую колонку ${col} (расширение листа)`);
+      return col;
+    }
+
+    if (!value || value.toString().trim() === '') {
+      Logger.log(`→ Используем пустую колонку ${col}`);
+      return col;
+    }
+  }
+
+  // Крайний случай — очень маловероятный
+  Logger.log(`→ Ничего не нашли → принудительно создаём после последней`);
+  sheet.insertColumnAfter(maxCol);
+  return maxCol + 1;
 }
 
 // ═══════════════════════════════════════════════
@@ -1093,7 +1314,7 @@ function setupDailyTrigger() {
     .create();
 
   const timezone = Session.getScriptTimeZone();
-  showAlert(`✅ Ежедневный сбор настроен на 9:00\n\nЧасовой пояс: ${timezone}\n\n✅ Триггеры не имеют лимита времени 6 минут!`);
+  showAlert(`✅ Ежедневный сбор настроен на 9:00\n\nЧасовой пояс: ${timezone}\n\n⚠️ ВАЖНО: У триггеров есть лимит 6 минут выполнения!\nДля большого количества URL используйте батчи.`);
 }
 
 function setupWeeklyTrigger() {
@@ -1105,7 +1326,7 @@ function setupWeeklyTrigger() {
     .create();
 
   const timezone = Session.getScriptTimeZone();
-  showAlert(`✅ Еженедельный сбор настроен на понедельник 9:00\n\nЧасовой пояс: ${timezone}\n\n✅ Триггеры не имеют лимита времени 6 минут!`);
+  showAlert(`✅ Еженедельный сбор настроен на понедельник 9:00\n\nЧасовой пояс: ${timezone}\n\n⚠️ ВАЖНО: У триггеров есть лимит 6 минут выполнения!\nДля большого количества URL используйте батчи.`);
 }
 
 function setupCustomSchedule() {
@@ -1127,7 +1348,7 @@ function setupCustomSchedule() {
         .create();
 
       const timezone = Session.getScriptTimeZone();
-      ui.alert(`✅ Ежедневный сбор настроен на ${hour}:00\n\nЧасовой пояс: ${timezone}\n\n✅ Триггеры не имеют лимита времени 6 минут!`);
+      ui.alert(`✅ Ежедневный сбор настроен на ${hour}:00\n\nЧасовой пояс: ${timezone}\n\n⚠️ ВАЖНО: У триггеров есть лимит 6 минут выполнения!\nДля большого количества URL используйте батчи.`);
     } else {
       ui.alert('❌ Неверное значение! Введите число от 0 до 23');
     }
@@ -1266,6 +1487,12 @@ function onOpen() {
   const urlList = getUrlList();
   const domains = Object.keys(CONFIG.DOMAINS);
 
+  Logger.log(`\n╔════════════════════════════════════════╗`);
+  Logger.log(`║   СОЗДАНИЕ МЕНЮ                       ║`);
+  Logger.log(`╚════════════════════════════════════════╝`);
+  Logger.log(`Доменов: ${domains.length}`);
+  Logger.log(`Всего URL: ${urlList.length}\n`);
+
   // ── Подменю «Собрать по одному URL», сгруппировано по доменам ──
   const urlMenu = ui.createMenu('📍 Собрать для одного URL');
 
@@ -1275,6 +1502,7 @@ function onOpen() {
     CONFIG.DOMAINS[domain].forEach((path) => {
       const label = path === '/' ? '/ (главная)' : path;
       domainSubMenu.addItem(label, `collectUrl${flatIndex}`);
+      Logger.log(`  Добавлен пункт меню: ${domain} → ${label} (функция collectUrl${flatIndex})`);
       flatIndex++;
     });
     urlMenu.addSubMenu(domainSubMenu);
@@ -1306,6 +1534,90 @@ function onOpen() {
       .addItem('👁️ Активные триггеры', 'viewCurrentTriggers')
       .addItem('🛑 Отключить автосбор', 'removeTriggers')
       .addToUi();
+  
+  Logger.log(`✅ Меню создано успешно\n`);
+}
+
+// ═══════════════════════════════════════════════
+// БАТЧ-ФУНКЦИИ ДЛЯ АВТОМАТИЧЕСКИХ ТРИГГЕРОВ
+// ═══════════════════════════════════════════════
+// Эти функции позволяют настроить 4 отдельных триггера,
+// каждый из которых обработает свой батч из 5 URL
+
+function collectBatch1() {
+  Logger.log('\n🔄 ЗАПУСК БАТЧА 1: URL 1-5');
+  const originalMode = CONFIG.BATCH_MODE;
+  const originalStart = CONFIG.BATCH_START;
+  const originalSize = CONFIG.BATCH_SIZE;
+  
+  CONFIG.BATCH_MODE = true;
+  CONFIG.BATCH_START = 0;
+  CONFIG.BATCH_SIZE = 5;
+  
+  try {
+    collectPageSpeedData();
+  } finally {
+    CONFIG.BATCH_MODE = originalMode;
+    CONFIG.BATCH_START = originalStart;
+    CONFIG.BATCH_SIZE = originalSize;
+  }
+}
+
+function collectBatch2() {
+  Logger.log('\n🔄 ЗАПУСК БАТЧА 2: URL 6-10');
+  const originalMode = CONFIG.BATCH_MODE;
+  const originalStart = CONFIG.BATCH_START;
+  const originalSize = CONFIG.BATCH_SIZE;
+  
+  CONFIG.BATCH_MODE = true;
+  CONFIG.BATCH_START = 5;
+  CONFIG.BATCH_SIZE = 5;
+  
+  try {
+    collectPageSpeedData();
+  } finally {
+    CONFIG.BATCH_MODE = originalMode;
+    CONFIG.BATCH_START = originalStart;
+    CONFIG.BATCH_SIZE = originalSize;
+  }
+}
+
+function collectBatch3() {
+  Logger.log('\n🔄 ЗАПУСК БАТЧА 3: URL 11-15');
+  const originalMode = CONFIG.BATCH_MODE;
+  const originalStart = CONFIG.BATCH_START;
+  const originalSize = CONFIG.BATCH_SIZE;
+  
+  CONFIG.BATCH_MODE = true;
+  CONFIG.BATCH_START = 10;
+  CONFIG.BATCH_SIZE = 5;
+  
+  try {
+    collectPageSpeedData();
+  } finally {
+    CONFIG.BATCH_MODE = originalMode;
+    CONFIG.BATCH_START = originalStart;
+    CONFIG.BATCH_SIZE = originalSize;
+  }
+}
+
+function collectBatch4() {
+  Logger.log('\n🔄 ЗАПУСК БАТЧА 4: URL 16-20');
+  const originalMode = CONFIG.BATCH_MODE;
+  const originalStart = CONFIG.BATCH_START;
+  const originalSize = CONFIG.BATCH_SIZE;
+  
+  CONFIG.BATCH_MODE = true;
+  CONFIG.BATCH_START = 15;
+  CONFIG.BATCH_SIZE = 5;
+  
+  try {
+    collectPageSpeedData();
+  } finally {
+    CONFIG.BATCH_MODE = originalMode;
+    CONFIG.BATCH_START = originalStart;
+    CONFIG.BATCH_SIZE = originalSize;
+  }
 }
 
 // ═══════════════════════════════════════════════

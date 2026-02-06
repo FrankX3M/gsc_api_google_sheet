@@ -117,3 +117,6 @@ $RECYCLE.BIN/
 *.mp4
 *.avi
 *.mov
+
+# other
+main_prod.js
